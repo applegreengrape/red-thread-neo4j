@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/applegreengrape/red-thread-neo4j/loader"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
-	//"context"
-	//firebase "firebase.google.com/go"
-	// "firebase.google.com/go/auth"
-	//"google.golang.org/api/option"
-)
 
+	"context"
+
+	firebase "firebase.google.com/go"
+	"google.golang.org/api/option"
+)
 
 func query() (interface{}, error) {
 	driver, err := neo4j.NewDriver("neo4j://localhost:7687", neo4j.BasicAuth("", "", ""))
@@ -23,15 +24,16 @@ func query() (interface{}, error) {
 	defer session.Close()
 
 	query, err := session.WriteTransaction(func(transaction neo4j.Transaction) (interface{}, error) {
-		q:=fmt.Sprintf(`MATCH p=(a:Node { id:"vKY8Uw" })-[r:friend*1..2]-(x:Node { type:"user" })
-		RETURN p`)
+		q := fmt.Sprintf(`MATCH (a:Node {id:"vKY8Uw"} ), 
+			(x:Node {id: "EXIhQM"}),
+			p = shortestPath((a)-[*]-(x))
+  			RETURN p`)
 		result, err := transaction.Run(q, map[string]interface{}{})
 		if err != nil {
 			return nil, err
 		}
 
 		if result.Next() {
-			fmt.Println(result.Record().Values[0])
 			return result.Record().Values[0], nil
 		}
 
@@ -44,31 +46,111 @@ func query() (interface{}, error) {
 	return query.(interface{}), nil
 }
 
-func main() {
-	res, err:= query()
-	if err != nil {}
+type Users []struct {
+	Id string 
+	Name string 
+}
 
-	resraw, err := json.Marshal(res)
-    if err != nil {
-    }
+type Rels []struct {
+	Id string 
+	Pid string 
+}
 
-	var resData Res
-	err = json.Unmarshal(resraw, &resData)
+func loadNode(name string) {
+	ctx := context.Background()
+	sa := option.WithCredentialsFile("./svc.json")
+	app, err := firebase.NewApp(ctx, nil, sa)
+	if err != nil {
+		// todo
+	}
+
+	client, err := app.Firestore(ctx)
+	if err != nil {
+		// todo
+	}
+
+	users, err := client.Collection("nodes").Doc(name).Get(ctx)
+	if err != nil {
+		// todo
+	}
+	user := users.Data()
+
+	rawUser, err := json.Marshal(user["data"])
 	if err != nil {
 	}
 
-	//fmt.Println(resData)
+	var userData Users
+	err = json.Unmarshal(rawUser, &userData)
+	if err != nil {
+	}
 
+	for  _, user := range userData {
+		res, err := loader.CreateNode(user.Id, user.Name, name)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(res)
+	}
+
+	defer client.Close()
 }
 
-type Res struct {
-	Records []Record
+func loadRel(){
+	ctx := context.Background()
+	sa := option.WithCredentialsFile("./svc.json")
+	app, err := firebase.NewApp(ctx, nil, sa)
+	if err != nil {
+		// todo
+	}
+
+	client, err := app.Firestore(ctx)
+	if err != nil {
+		// todo
+	}
+	rel, err := client.Collection("rel").Doc("data").Get(ctx)
+	if err != nil {
+		//
+	}
+	rels := rel.Data()
+
+	rawRels, err := json.Marshal(rels["data"])
+	if err != nil {
+	}
+
+	var r Rels
+	err = json.Unmarshal(rawRels, &r)
+	if err != nil {
+	}
+
+	for _, rel := range r {
+		fmt.Println("create rels: ",rel.Id, rel.Pid)
+		err := loader.CreateRel(rel.Id, rel.Pid)
+		if err != nil {
+			//
+		}
+	}
+
+	defer client.Close()
 }
 
-type Record struct{
-	Item []Data
+func reload(){
+	loader.ClearDB()
+	loadNode("users")
+	loadNode("friends")
+	loadRel()
 }
 
-type Data struct{
-	Id string
+func main() {
+	reload()
+
+	/*
+	res, err := query()
+	if err != nil {
+		//
+	}
+	p :=res.(neo4j.Path)
+	fmt.Println(p)
+	fmt.Println(p.Nodes[1].Props["name"])
+	*/
+
 }
