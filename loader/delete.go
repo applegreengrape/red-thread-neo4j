@@ -6,7 +6,7 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 )
 
-func ClearDB() (error) {
+func ClearDB() error {
 	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth("", "", ""))
 	if err != nil {
 		return err

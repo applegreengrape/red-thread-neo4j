@@ -8,7 +8,7 @@ import (
 
 const uri = "neo4j://localhost:7687"
 
-func CreateNode(id, name, rel string) (string, error) {
+func CreateNode(id, name, nodeType string) (string, error) {
 	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth("", "", ""))
 	if err != nil {
 		return "", err
@@ -19,10 +19,10 @@ func CreateNode(id, name, rel string) (string, error) {
 	defer session.Close()
 
 	node, err := session.WriteTransaction(func(transaction neo4j.Transaction) (interface{}, error) {
-		result, err := transaction.Run("CREATE (n:Node { id: $id, name: $name, type: $rel }) RETURN n.id, n.name, n.type", map[string]interface{}{
-			"id":   id,
-			"name": name,
-			"rel": rel,
+		result, err := transaction.Run("CREATE (n:Node { id: $id, name: $name, type: $nodeType }) RETURN n.id, n.name, n.type", map[string]interface{}{
+			"id":       id,
+			"name":     name,
+			"nodeType": nodeType,
 		})
 		if err != nil {
 			return nil, err
@@ -41,7 +41,7 @@ func CreateNode(id, name, rel string) (string, error) {
 	return node.(string), nil
 }
 
-func CreateRel(pid, id string) (error) {
+func CreateRel(pid, id string) error {
 	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth("", "", ""))
 	if err != nil {
 		return err

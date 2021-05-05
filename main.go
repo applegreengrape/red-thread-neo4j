@@ -3,154 +3,47 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/applegreengrape/red-thread-neo4j/loader"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	//"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 
-	"context"
-
-	firebase "firebase.google.com/go"
-	"google.golang.org/api/option"
+	"github.com/gorilla/mux"
+	"net/http"
 )
 
-func query() (interface{}, error) {
-	driver, err := neo4j.NewDriver("neo4j://localhost:7687", neo4j.BasicAuth("", "", ""))
-	if err != nil {
-		return nil, err
-	}
-	defer driver.Close()
-
-	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close()
-
-	query, err := session.WriteTransaction(func(transaction neo4j.Transaction) (interface{}, error) {
-		q := fmt.Sprintf(`MATCH (a:Node {id:"vKY8Uw"} ), 
-			(x:Node {id: "EXIhQM"}),
-			p = shortestPath((a)-[*]-(x))
-  			RETURN p`)
-		result, err := transaction.Run(q, map[string]interface{}{})
-		if err != nil {
-			return nil, err
-		}
-
-		if result.Next() {
-			return result.Record().Values[0], nil
-		}
-
-		return nil, result.Err()
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return query.(interface{}), nil
+func home(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "red thread neo4j api endpoint")
 }
 
-type Users []struct {
-	Id string 
-	Name string 
+func createNode(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		fmt.Fprintf(w, "request body error")
+	}
+
+	var new Node
+	json.Unmarshal(reqBody, &new)
+	loader.CreateNode(new.ID, new.Name, new.NodeType)
+	json.NewEncoder(w).Encode(new)
 }
 
-type Rels []struct {
-	Id string 
-	Pid string 
-}
-
-func loadNode(name string) {
-	ctx := context.Background()
-	sa := option.WithCredentialsFile("./svc.json")
-	app, err := firebase.NewApp(ctx, nil, sa)
+func CreateRel(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		// todo
+		fmt.Fprintf(w, "request body error")
 	}
 
-	client, err := app.Firestore(ctx)
-	if err != nil {
-		// todo
-	}
-
-	users, err := client.Collection("nodes").Doc(name).Get(ctx)
-	if err != nil {
-		// todo
-	}
-	user := users.Data()
-
-	rawUser, err := json.Marshal(user["data"])
-	if err != nil {
-	}
-
-	var userData Users
-	err = json.Unmarshal(rawUser, &userData)
-	if err != nil {
-	}
-
-	for  _, user := range userData {
-		res, err := loader.CreateNode(user.Id, user.Name, name)
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println(res)
-	}
-
-	defer client.Close()
-}
-
-func loadRel(){
-	ctx := context.Background()
-	sa := option.WithCredentialsFile("./svc.json")
-	app, err := firebase.NewApp(ctx, nil, sa)
-	if err != nil {
-		// todo
-	}
-
-	client, err := app.Firestore(ctx)
-	if err != nil {
-		// todo
-	}
-	rel, err := client.Collection("rel").Doc("data").Get(ctx)
-	if err != nil {
-		//
-	}
-	rels := rel.Data()
-
-	rawRels, err := json.Marshal(rels["data"])
-	if err != nil {
-	}
-
-	var r Rels
-	err = json.Unmarshal(rawRels, &r)
-	if err != nil {
-	}
-
-	for _, rel := range r {
-		fmt.Println("create rels: ",rel.Id, rel.Pid)
-		err := loader.CreateRel(rel.Id, rel.Pid)
-		if err != nil {
-			//
-		}
-	}
-
-	defer client.Close()
-}
-
-func reload(){
-	loader.ClearDB()
-	loadNode("users")
-	loadNode("friends")
-	loadRel()
+	var rel Rel
+	json.Unmarshal(reqBody, &rel)
+	loader.CreateRel(rel.PID, rel.ID)
+	json.NewEncoder(w).Encode(rel)
 }
 
 func main() {
-	reload()
-
-	/*
-	res, err := query()
-	if err != nil {
-		//
-	}
-	p :=res.(neo4j.Path)
-	fmt.Println(p)
-	fmt.Println(p.Nodes[1].Props["name"])
-	*/
-
+	router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/", home)
+	router.HandleFunc("/createNode", createNode).Methods("POST")
+	router.HandleFunc("/createRel", CreateRel).Methods("POST")
+	http.ListenAndServe(":8080", router)
 }
